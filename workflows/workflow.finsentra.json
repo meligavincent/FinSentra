@@ -1,13 +1,9 @@
 {
-  "name": "FinSentra - Daily Crypto Digest",
+  "name": "FinSentra - Daily Crypto Digest (Code nodes, fixed)",
   "nodes": [
     {
       "parameters": {
-        "triggerTimes": {
-          "item": [
-            { "hour": 8, "minute": 0 }
-          ]
-        }
+        "triggerTimes": { "item": [ { "hour": 8, "minute": 0 } ] }
       },
       "id": "Cron",
       "name": "Cron (08:00)",
@@ -47,29 +43,30 @@
     },
     {
       "parameters": {
-        "functionCode": "const markets = $json;\nconst rows = Array.isArray(markets) ? markets : markets.body || [];\nfunction num(x){return (typeof x==='number')?x: (x?Number(x):0)}\nconst sorted24 = [...rows].sort((a,b)=>num(b.price_change_percentage_24h_in_currency)-num(a.price_change_percentage_24h_in_currency));\nconst gainers = sorted24.slice(0,5).map(x=>({symbol:String(x.symbol||'').toUpperCase(), name:x.name, price:x.current_price, ch24:num(x.price_change_percentage_24h_in_currency), ch7:num(x.price_change_percentage_7d_in_currency)}));\nconst losers = sorted24.slice(-5).reverse().map(x=>({symbol:String(x.symbol||'').toUpperCase(), name:x.name, price:x.current_price, ch24:num(x.price_change_percentage_24h_in_currency), ch7:num(x.price_change_percentage_7d_in_currency)}));\nconst get = s=>rows.find(x=>String(x.symbol||'').toLowerCase()===s)||{};\nconst btc = get('btc');\nconst eth = get('eth');\nreturn [{ json: { gainers, losers, btc: {price:btc.current_price, ch24:num(btc.price_change_percentage_24h_in_currency), ch7:num(btc.price_change_percentage_7d_in_currency)}, eth: {price:eth.current_price, ch24:num(eth.price_change_percentage_24h_in_currency), ch7:num(eth.price_change_percentage_7d_in_currency)} } }];"
+        "language": "JavaScript",
+        "jsCode": "const rows = items.map(i => i.json);\nfunction num(x){return typeof x==='number'?x:(x?Number(x):0)}\nconst sorted24=[...rows].sort((a,b)=>num(b.price_change_percentage_24h_in_currency)-num(a.price_change_percentage_24h_in_currency));\nconst gainers=sorted24.slice(0,5).map(x=>({symbol:String(x.symbol||'').toUpperCase(),name:x.name,price:x.current_price,ch24:num(x.price_change_percentage_24h_in_currency),ch7:num(x.price_change_percentage_7d_in_currency)}));\nconst losers=sorted24.slice(-5).reverse().map(x=>({symbol:String(x.symbol||'').toUpperCase(),name:x.name,price:x.current_price,ch24:num(x.price_change_percentage_24h_in_currency),ch7:num(x.price_change_percentage_7d_in_currency)}));\nconst bySym = s => rows.find(x => String(x.symbol||'').toLowerCase()===s) || {};\nconst btc = bySym('btc');\nconst eth = bySym('eth');\nreturn [{ json: { gainers, losers, btc: {price: btc.current_price, ch24: num(btc.price_change_percentage_24h_in_currency), ch7: num(btc.price_change_percentage_7d_in_currency)}, eth: {price: eth.current_price, ch24: num(eth.price_change_percentage_24h_in_currency), ch7: num(eth.price_change_percentage_7d_in_currency)} } }];"
       },
-      "id": "Calc",
-      "name": "Compute Movers",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 2,
+      "id": "CodeCalc",
+      "name": "Compute Movers (Code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
       "position": [760, 160],
       "notes": "Top gainers/losers + BTC/ETH summary"
     },
     {
       "parameters": {
-        "functionCode": "const f = $json && $json.data && $json.data[0] ? $json.data[0] : {value: 'NA', value_classification:'NA'};\nreturn [{ json: { fng_value: f.value, fng_class: f.value_classification } }];"
+        "language": "JavaScript",
+        "jsCode": "const j = (items[0]||{}).json || {};\nconst f = (j.data && j.data[0]) ? j.data[0] : { value: 'NA', value_classification: 'NA' };\nreturn [{ json: { fng_value: f.value, fng_class: f.value_classification } }];"
       },
-      "id": "PickFNG",
-      "name": "Pick F&G",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 2,
+      "id": "CodePickFNG",
+      "name": "Pick F&G (Code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
       "position": [760, 360]
     },
     {
       "parameters": {
-        "mode": "passThrough",
-        "join": "combine"
+        "mode": "mergeByIndex"
       },
       "id": "Merge",
       "name": "Merge",
@@ -79,12 +76,13 @@
     },
     {
       "parameters": {
-        "functionCode": "const d = $json;\nconst md = (arr=[]) => arr.map(x=>`- **${x.symbol}** (${x.name}) — $${x.price} | 24h: ${Number(x.ch24||0).toFixed(2)}% | 7d: ${Number(x.ch7||0).toFixed(2)}%`).join('\\n');\nconst prompt = `You are a neutral crypto market analyst. Using the JSON data below, write a concise 120–160 word daily brief in Markdown. Mention BTC and ETH moves, notable top gainers/losers, and the Fear & Greed index with a one-line interpretation. Avoid advice language.\\n\\nJSON:\\n${JSON.stringify(d)}`;\nreturn [{ json: { prompt, table: `\\n**Top Gainers (24h)**\\n${md(d.gainers)}\\n\\n**Top Losers (24h)**\\n${md(d.losers)}` } }];"
+        "language": "JavaScript",
+        "jsCode": "const d = (items[0]||{}).json || {};\nconst md = (arr=[]) => arr.map(x=>`- **${x.symbol}** (${x.name}) — $${x.price} | 24h: ${Number(x.ch24||0).toFixed(2)}% | 7d: ${Number(x.ch7||0).toFixed(2)}%`).join('\\n');\nconst prompt = `You are a neutral crypto market analyst. Using the JSON data below, write a concise 120–160 word daily brief in Markdown. Mention BTC and ETH moves, notable top gainers/losers, and the Fear & Greed index with a one-line interpretation. Avoid advice language.\\n\\nJSON:\\n${JSON.stringify(d)}`;\nreturn [{ json: { prompt, table: `\\n**Top Gainers (24h)**\\n${md(d.gainers)}\\n\\n**Top Losers (24h)**\\n${md(d.losers)}\\n\\n**Fear & Greed**: ${d.fng_value||''} (${d.fng_class||''})` } }];"
       },
-      "id": "Prompt",
-      "name": "Compose Prompt",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 2,
+      "id": "CodePrompt",
+      "name": "Compose Prompt (Code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
       "position": [1200, 260]
     },
     {
@@ -119,12 +117,12 @@
   ],
   "connections": {
     "Cron (08:00)": { "main": [[{ "node": "CoinGecko Markets", "type": "main", "index": 0 }, { "node": "Fear & Greed", "type": "main", "index": 0 }]] },
-    "CoinGecko Markets": { "main": [[{ "node": "Compute Movers", "type": "main", "index": 0 }]] },
-    "Fear & Greed": { "main": [[{ "node": "Pick F&G", "type": "main", "index": 0 }]] },
-    "Compute Movers": { "main": [[{ "node": "Merge", "type": "main", "index": 0 }]] },
-    "Pick F&G": { "main": [[{ "node": "Merge", "type": "main", "index": 1 }]] },
-    "Merge": { "main": [[{ "node": "Compose Prompt", "type": "main", "index": 0 }]] },
-    "Compose Prompt": { "main": [[{ "node": "Ollama (llama3.2)", "type": "main", "index": 0 }]] },
+    "CoinGecko Markets": { "main": [[{ "node": "Compute Movers (Code)", "type": "main", "index": 0 }]] },
+    "Fear & Greed": { "main": [[{ "node": "Pick F&G (Code)", "type": "main", "index": 0 }]] },
+    "Compute Movers (Code)": { "main": [[{ "node": "Merge", "type": "main", "index": 0 }]] },
+    "Pick F&G (Code)": { "main": [[{ "node": "Merge", "type": "main", "index": 1 }]] },
+    "Merge": { "main": [[{ "node": "Compose Prompt (Code)", "type": "main", "index": 0 }]] },
+    "Compose Prompt (Code)": { "main": [[{ "node": "Ollama (llama3.2)", "type": "main", "index": 0 }]] },
     "Ollama (llama3.2)": { "main": [[{ "node": "Send Email", "type": "main", "index": 0 }]] }
   },
   "active": false

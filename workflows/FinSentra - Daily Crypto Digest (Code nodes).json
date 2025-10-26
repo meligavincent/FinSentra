@@ -1,0 +1,296 @@
+{
+  "name": "FinSentra - Daily Crypto Digest (Code nodes)",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8
+            }
+          ]
+        }
+      },
+      "id": "3cadfb0c-22d6-4946-a774-d734763d5529",
+      "name": "Cron (08:00)",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        -256,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h,7d",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "76bdb78c-f117-41cb-9ff5-036b98ce5aa9",
+      "name": "CoinGecko Markets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.alternative.me/fng/?limit=1",
+        "options": {}
+      },
+      "id": "c722e760-23cb-4c08-bef8-236646af3260",
+      "name": "Fear & Greed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        0,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "language": "JavaScript",
+        "jsCode": "const rows = items.map(i => i.json);\nfunction num(x){return typeof x==='number'?x:(x?Number(x):0)}\nconst sorted24=[...rows].sort((a,b)=>num(b.price_change_percentage_24h_in_currency)-num(a.price_change_percentage_24h_in_currency));\nconst gainers=sorted24.slice(0,5).map(x=>({symbol:String(x.symbol||'').toUpperCase(),name:x.name,price:x.current_price,ch24:num(x.price_change_percentage_24h_in_currency),ch7:num(x.price_change_percentage_7d_in_currency)}));\nconst losers=sorted24.slice(-5).reverse().map(x=>({symbol:String(x.symbol||'').toUpperCase(),name:x.name,price:x.current_price,ch24:num(x.price_change_percentage_24h_in_currency),ch7:num(x.price_change_percentage_7d_in_currency)}));\nconst bySym = s => rows.find(x => String(x.symbol||'').toLowerCase()===s) || {};\nconst btc = bySym('btc');\nconst eth = bySym('eth');\nreturn [{ json: { gainers, losers, btc: {price: btc.current_price, ch24: num(btc.price_change_percentage_24h_in_currency), ch7: num(btc.price_change_percentage_7d_in_currency)}, eth: {price: eth.current_price, ch24: num(eth.price_change_percentage_24h_in_currency), ch7: num(eth.price_change_percentage_7d_in_currency)} } }];"
+      },
+      "id": "f30e90ff-d922-441f-a4bb-22646dd0833e",
+      "name": "Compute Movers (Code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ],
+      "notes": "Top gainers/losers + BTC/ETH summary"
+    },
+    {
+      "parameters": {
+        "language": "JavaScript",
+        "jsCode": "const j = (items[0]||{}).json || {};\nconst f = (j.data && j.data[0]) ? j.data[0] : { value: 'NA', value_classification: 'NA' };\nreturn [{ json: { fng_value: f.value, fng_class: f.value_classification } }];"
+      },
+      "id": "7010dd77-a413-4ea1-9a60-090023889816",
+      "name": "Pick F&G (Code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        240,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "e2c2859e-c623-45dc-80fa-680ad4ed9287",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        464,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "language": "JavaScript",
+        "jsCode": "const d = (items[0]||{}).json || {};\nconst md = (arr=[]) => arr.map(x=>`- **${x.symbol}** (${x.name}) — $${x.price} | 24h: ${Number(x.ch24||0).toFixed(2)}% | 7d: ${Number(x.ch7||0).toFixed(2)}%`).join('\\n');\nconst prompt = `You are a neutral crypto market analyst. Using the JSON data below, write a concise 120–160 word daily brief in Markdown. Mention BTC and ETH moves, notable top gainers/losers, and the Fear & Greed index with a one-line interpretation. Avoid advice language.\\n\\nJSON:\\n${JSON.stringify(d)}`;\nreturn [{ json: { prompt, table: `\\n**Top Gainers (24h)**\\n${md(d.gainers)}\\n\\n**Top Losers (24h)**\\n${md(d.losers)}\\n\\n**Fear & Greed**: ${d.fng_value||''} (${d.fng_class||''})` } }];"
+      },
+      "id": "4af7705c-9b88-4f89-9000-ac4f9522fdfe",
+      "name": "Compose Prompt (Code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        688,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/api/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama3.2"
+            },
+            {
+              "name": "prompt",
+              "value": "=={{ $json[\"prompt\"]}}"
+            },
+            {
+              "name": "stream",
+              "value": "={{false}}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 90000
+        }
+      },
+      "id": "95a3a79f-8bcc-4f20-857b-d953319a4905",
+      "name": "Ollama (llama3.2)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        912,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "digest@finsentra.local",
+        "toEmail": "you@example.com",
+        "subject": "FinSentra – Daily Crypto Digest",
+        "text": "={{$json.response}}",
+        "options": {}
+      },
+      "id": "319dac93-1906-4559-9407-80b0aa294aa7",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        112
+      ],
+      "webhookId": "533a40df-6af4-450d-a32b-6d76230fa344",
+      "credentials": {
+        "smtp": {
+          "id": "l2kl2xjqzcw6tfaD",
+          "name": "SMTP account"
+        }
+      },
+      "notes": "Swap to Telegram if preferred"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cron (08:00)": {
+      "main": [
+        [
+          {
+            "node": "CoinGecko Markets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fear & Greed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CoinGecko Markets": {
+      "main": [
+        [
+          {
+            "node": "Compute Movers (Code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fear & Greed": {
+      "main": [
+        [
+          {
+            "node": "Pick F&G (Code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Movers (Code)": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick F&G (Code)": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Compose Prompt (Code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Prompt (Code)": {
+      "main": [
+        [
+          {
+            "node": "Ollama (llama3.2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama (llama3.2)": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "eb93dc7f-6dd6-4c07-87c7-b9357d4287e9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "558d88703fb65b2d0e44613bc35916258b0f0bf983c5d4730c00c424b77ca36a"
+  },
+  "id": "ER4qafamykyKZSCb",
+  "tags": []
+}
