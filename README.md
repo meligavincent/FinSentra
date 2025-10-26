@@ -45,3 +45,5 @@ Built with **n8n**, **OpenAI**, and **CoinGecko**, it helps traders and financia
 ```bash
 git clone https://github.com/meligavincent/finsentra.git
 cd finsentra
+
+curl -X GET "https://api.coingecko.com/api/v3/ping" -H "x-cg-demo-api-key: CG-aXpbR5LCu4EENjwSa7MtUHME"

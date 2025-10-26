@@ -1,0 +1,131 @@
+{
+  "name": "FinSentra - Daily Crypto Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            { "hour": 8, "minute": 0 }
+          ]
+        }
+      },
+      "id": "Cron",
+      "name": "Cron (08:00)",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [260, 260]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h,7d",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Accept", "value": "application/json" },
+            { "name": "User-Agent", "value": "finsentra-n8n" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "CG",
+      "name": "CoinGecko Markets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [520, 160]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.alternative.me/fng/?limit=1"
+      },
+      "id": "FNG",
+      "name": "Fear & Greed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [520, 360]
+    },
+    {
+      "parameters": {
+        "functionCode": "const markets = $json;\nconst rows = Array.isArray(markets) ? markets : markets.body || [];\nfunction num(x){return (typeof x==='number')?x: (x?Number(x):0)}\nconst sorted24 = [...rows].sort((a,b)=>num(b.price_change_percentage_24h_in_currency)-num(a.price_change_percentage_24h_in_currency));\nconst gainers = sorted24.slice(0,5).map(x=>({symbol:String(x.symbol||'').toUpperCase(), name:x.name, price:x.current_price, ch24:num(x.price_change_percentage_24h_in_currency), ch7:num(x.price_change_percentage_7d_in_currency)}));\nconst losers = sorted24.slice(-5).reverse().map(x=>({symbol:String(x.symbol||'').toUpperCase(), name:x.name, price:x.current_price, ch24:num(x.price_change_percentage_24h_in_currency), ch7:num(x.price_change_percentage_7d_in_currency)}));\nconst get = s=>rows.find(x=>String(x.symbol||'').toLowerCase()===s)||{};\nconst btc = get('btc');\nconst eth = get('eth');\nreturn [{ json: { gainers, losers, btc: {price:btc.current_price, ch24:num(btc.price_change_percentage_24h_in_currency), ch7:num(btc.price_change_percentage_7d_in_currency)}, eth: {price:eth.current_price, ch24:num(eth.price_change_percentage_24h_in_currency), ch7:num(eth.price_change_percentage_7d_in_currency)} } }];"
+      },
+      "id": "Calc",
+      "name": "Compute Movers",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [760, 160],
+      "notes": "Top gainers/losers + BTC/ETH summary"
+    },
+    {
+      "parameters": {
+        "functionCode": "const f = $json && $json.data && $json.data[0] ? $json.data[0] : {value: 'NA', value_classification:'NA'};\nreturn [{ json: { fng_value: f.value, fng_class: f.value_classification } }];"
+      },
+      "id": "PickFNG",
+      "name": "Pick F&G",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [760, 360]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "join": "combine"
+      },
+      "id": "Merge",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [980, 260]
+    },
+    {
+      "parameters": {
+        "functionCode": "const d = $json;\nconst md = (arr=[]) => arr.map(x=>`- **${x.symbol}** (${x.name}) — $${x.price} | 24h: ${Number(x.ch24||0).toFixed(2)}% | 7d: ${Number(x.ch7||0).toFixed(2)}%`).join('\\n');\nconst prompt = `You are a neutral crypto market analyst. Using the JSON data below, write a concise 120–160 word daily brief in Markdown. Mention BTC and ETH moves, notable top gainers/losers, and the Fear & Greed index with a one-line interpretation. Avoid advice language.\\n\\nJSON:\\n${JSON.stringify(d)}`;\nreturn [{ json: { prompt, table: `\\n**Top Gainers (24h)**\\n${md(d.gainers)}\\n\\n**Top Losers (24h)**\\n${md(d.losers)}` } }];"
+      },
+      "id": "Prompt",
+      "name": "Compose Prompt",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [1200, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/api/generate",
+        "jsonParameters": true,
+        "options": { "timeout": 90000 },
+        "bodyParametersJson": "={{ { model: \"llama3.2\", prompt: $json[\"prompt\"], stream: false } }}"
+      },
+      "id": "LLM",
+      "name": "Ollama (llama3.2)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1420, 260]
+    },
+    {
+      "parameters": {
+        "fromEmail": "digest@finsentra.local",
+        "toEmail": "you@example.com",
+        "subject": "FinSentra – Daily Crypto Digest",
+        "text": "={{$json.response}}",
+        "html": "={{\"<pre>\" + ($json.response || \"\").replace(/\\n/g, \"<br>\") + \"</pre>\"}}"
+      },
+      "id": "Mail",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1640, 260],
+      "notes": "Swap to Telegram if preferred"
+    }
+  ],
+  "connections": {
+    "Cron (08:00)": { "main": [[{ "node": "CoinGecko Markets", "type": "main", "index": 0 }, { "node": "Fear & Greed", "type": "main", "index": 0 }]] },
+    "CoinGecko Markets": { "main": [[{ "node": "Compute Movers", "type": "main", "index": 0 }]] },
+    "Fear & Greed": { "main": [[{ "node": "Pick F&G", "type": "main", "index": 0 }]] },
+    "Compute Movers": { "main": [[{ "node": "Merge", "type": "main", "index": 0 }]] },
+    "Pick F&G": { "main": [[{ "node": "Merge", "type": "main", "index": 1 }]] },
+    "Merge": { "main": [[{ "node": "Compose Prompt", "type": "main", "index": 0 }]] },
+    "Compose Prompt": { "main": [[{ "node": "Ollama (llama3.2)", "type": "main", "index": 0 }]] },
+    "Ollama (llama3.2)": { "main": [[{ "node": "Send Email", "type": "main", "index": 0 }]] }
+  },
+  "active": false
+}
